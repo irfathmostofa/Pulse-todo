@@ -94,7 +94,7 @@ export default function TaskItem({
       {!recurring && (
         <button
           onClick={() => onConvertToRecurring(task)}
-          className="shrink-0 rounded-full p-1.5 text-ghost-faint opacity-0 group-hover:opacity-100 hover:bg-ink hover:text-volt transition-all"
+          className="shrink-0 rounded-full p-1.5 text-ghost-faint hover:bg-ink hover:text-volt transition-all"
           aria-label="Make this task recurring"
           title="Make recurring"
         >
@@ -104,7 +104,7 @@ export default function TaskItem({
 
       <button
         onClick={handleDeleteClick}
-        className="shrink-0 rounded-full p-1.5 text-ghost-faint opacity-0 group-hover:opacity-100 hover:bg-ink hover:text-pulse transition-all"
+        className="shrink-0 rounded-full p-1.5 text-ghost-faint hover:bg-ink hover:text-pulse transition-all"
         aria-label={recurring ? "Delete recurring task" : "Delete task"}
         title={recurring ? "Delete recurring task" : "Delete task"}
       >
