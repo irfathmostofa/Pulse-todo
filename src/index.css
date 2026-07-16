@@ -1,0 +1,76 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --color-ink: 15 16 25;
+  --color-ink-soft: 22 24 36;
+  --color-ink-surface: 28 31 46;
+  --color-ink-line: 42 46 66;
+  --color-ghost: 237 238 245;
+  --color-ghost-muted: 154 156 181;
+  --color-ghost-faint: 91 94 120;
+  color-scheme: dark;
+}
+
+html.light {
+  --color-ink: 245 245 247;
+  --color-ink-soft: 255 255 255;
+  --color-ink-surface: 255 255 255;
+  --color-ink-line: 226 228 236;
+  --color-ghost: 20 21 31;
+  --color-ghost-muted: 91 94 120;
+  --color-ghost-faint: 154 156 181;
+  color-scheme: light;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html, body {
+  background: rgb(var(--color-ink));
+  color: rgb(var(--color-ghost));
+}
+
+body {
+  font-family: 'Inter', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #2A2E42;
+  border-radius: 8px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #3a3f5c;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
+
+:focus-visible {
+  outline: 2px solid #FF5D73;
+  outline-offset: 2px;
+}
+
+.scrollbar-hide {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
