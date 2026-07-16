@@ -10,7 +10,7 @@ import {
 import { format } from "date-fns";
 import Tooltip from "./Tooltip";
 import { fromISODate, getMonthDays, toISODate } from "../lib/dateUtils";
-import { Check, Repeat } from "lucide-react";
+import { Check, Circle, Repeat } from "lucide-react";
 
 export default function MonthlyChart({
   monthDate,
