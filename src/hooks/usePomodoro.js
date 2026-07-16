@@ -1,146 +1,223 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
-import { supabase } from '../supabaseClient'
-import { toISODate } from '../lib/dateUtils'
-import {
-  POMODORO_PRESETS,
-  POMODORO_LABELS,
-  SESSIONS_BEFORE_LONG_BREAK
-} from '../lib/constants'
+// hooks/usePomodoro.js
+import { useState, useEffect, useRef, useCallback } from "react";
+import { POMODORO_PRESETS, SESSIONS_BEFORE_LONG_BREAK } from "../lib/constants";
 
-const STORAGE_KEY = 'pulse_pomodoro_durations'
+export function usePomodoro({ onNotify } = {}) {
+  const [mode, setMode] = useState("focus");
+  const [durations, setDurations] = useState(POMODORO_PRESETS);
+  const [secondsLeft, setSecondsLeft] = useState(POMODORO_PRESETS.focus * 60);
+  const [running, setRunning] = useState(false);
+  const [sessionIndex, setSessionIndex] = useState(1); // Start at 1
+  const [todaySessions, setTodaySessions] = useState(0);
+  const [todayFocusSeconds, setTodayFocusSeconds] = useState(0);
+  const [monthSessions, setMonthSessions] = useState(0);
 
-function loadDurations() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    if (!raw) return { ...POMODORO_PRESETS }
-    return { ...POMODORO_PRESETS, ...JSON.parse(raw) }
-  } catch {
-    return { ...POMODORO_PRESETS }
-  }
-}
+  const intervalRef = useRef(null);
+  const audioRef = useRef(null);
 
-export function usePomodoro({ notify } = {}) {
-  const [durations, setDurations] = useState(loadDurations)
-  const [mode, setMode] = useState('focus')
-  const [secondsLeft, setSecondsLeft] = useState(durations.focus * 60)
-  const [running, setRunning] = useState(false)
-  const [sessionIndex, setSessionIndex] = useState(1)
-  const [todaySessions, setTodaySessions] = useState(0)
-  const [todayFocusSeconds, setTodayFocusSeconds] = useState(0)
-  const [monthSessions, setMonthSessions] = useState(0)
+  // Create audio context for sound
+  const playSound = useCallback(() => {
+    try {
+      // Try using AudioContext for better compatibility
+      const audioContext = new (
+        window.AudioContext || window.webkitAudioContext
+      )();
+      const oscillator = audioContext.createOscillator();
+      const gainNode = audioContext.createGain();
 
-  const intervalRef = useRef(null)
+      oscillator.connect(gainNode);
+      gainNode.connect(audioContext.destination);
 
-  const fetchStats = useCallback(async () => {
-    const todayISO = toISODate(new Date())
-    const monthStartISO = toISODate(new Date(new Date().getFullYear(), new Date().getMonth(), 1))
+      oscillator.frequency.value = 880;
+      oscillator.type = "sine";
 
-    const { data: todayRows } = await supabase
-      .from('pomodoro_sessions')
-      .select('type, duration_minutes')
-      .eq('date', todayISO)
+      // Create a beep pattern
+      gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+      gainNode.gain.exponentialRampToValueAtTime(
+        0.01,
+        audioContext.currentTime + 0.5,
+      );
 
-    if (todayRows) {
-      const focusRows = todayRows.filter((r) => r.type === 'focus')
-      setTodaySessions(focusRows.length)
-      setTodayFocusSeconds(focusRows.reduce((sum, r) => sum + r.duration_minutes * 60, 0))
+      oscillator.start(audioContext.currentTime);
+      oscillator.stop(audioContext.currentTime + 0.5);
+
+      // Second beep
+      setTimeout(() => {
+        const audioContext2 = new (
+          window.AudioContext || window.webkitAudioContext
+        )();
+        const oscillator2 = audioContext2.createOscillator();
+        const gainNode2 = audioContext2.createGain();
+
+        oscillator2.connect(gainNode2);
+        gainNode2.connect(audioContext2.destination);
+
+        oscillator2.frequency.value = 660;
+        oscillator2.type = "sine";
+
+        gainNode2.gain.setValueAtTime(0.3, audioContext2.currentTime);
+        gainNode2.gain.exponentialRampToValueAtTime(
+          0.01,
+          audioContext2.currentTime + 0.5,
+        );
+
+        oscillator2.start(audioContext2.currentTime);
+        oscillator2.stop(audioContext2.currentTime + 0.5);
+      }, 300);
+    } catch (error) {
+      console.warn("Could not play sound:", error);
     }
+  }, []);
 
-    const { count } = await supabase
-      .from('pomodoro_sessions')
-      .select('id', { count: 'exact', head: true })
-      .eq('type', 'focus')
-      .gte('date', monthStartISO)
+  const sendNotification = useCallback(
+    (title, body) => {
+      // First try to use the onNotify callback
+      if (onNotify) {
+        onNotify(title, { body });
+      }
 
-    setMonthSessions(count || 0)
-  }, [])
-
-  useEffect(() => {
-    fetchStats()
-  }, [fetchStats])
-
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(durations))
-  }, [durations])
-
-  // Reset the clock whenever mode or its configured duration changes, unless mid-run
-  useEffect(() => {
-    if (!running) {
-      setSecondsLeft(durations[mode] * 60)
-    }
-  }, [mode, durations, running])
-
-  const logSession = useCallback(
-    async (finishedMode) => {
-      const todayISO = toISODate(new Date())
-      await supabase.from('pomodoro_sessions').insert({
-        date: todayISO,
-        type: finishedMode,
-        duration_minutes: durations[finishedMode],
-        completed: true
-      })
-      fetchStats()
+      // Also try to play sound
+      playSound();
     },
-    [durations, fetchStats]
-  )
+    [onNotify, playSound],
+  );
 
-  const advanceMode = useCallback(
-    (finishedMode) => {
-      if (finishedMode === 'focus') {
-        const nextIsLong = sessionIndex % SESSIONS_BEFORE_LONG_BREAK === 0
-        const nextMode = nextIsLong ? 'long_break' : 'short_break'
-        notify?.(`${POMODORO_LABELS.focus} complete`, {
-          body: `Nice work. Next up: ${POMODORO_LABELS[nextMode]}.`
-        })
-        setMode(nextMode)
-      } else {
-        notify?.(`${POMODORO_LABELS[finishedMode]} over`, {
-          body: 'Back to focus when you\u2019re ready.'
-        })
-        setSessionIndex((i) => (finishedMode === 'long_break' ? 1 : i + 1))
-        setMode('focus')
+  const switchMode = useCallback(
+    (newMode) => {
+      setRunning(false);
+      setMode(newMode);
+      setSecondsLeft(durations[newMode] * 60);
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
       }
     },
-    [sessionIndex, notify]
-  )
+    [durations],
+  );
 
-  useEffect(() => {
-    if (!running) {
-      clearInterval(intervalRef.current)
-      return
+  const start = useCallback(() => {
+    if (secondsLeft <= 0) {
+      setSecondsLeft(durations[mode] * 60);
     }
-    intervalRef.current = setInterval(() => {
-      setSecondsLeft((s) => {
-        if (s <= 1) {
-          clearInterval(intervalRef.current)
-          const finishedMode = mode
-          logSession(finishedMode)
-          advanceMode(finishedMode)
-          setRunning(false)
-          return 0
-        }
-        return s - 1
-      })
-    }, 1000)
-    return () => clearInterval(intervalRef.current)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [running, mode])
+    setRunning(true);
+  }, [secondsLeft, durations, mode]);
 
-  const start = useCallback(() => setRunning(true), [])
-  const pause = useCallback(() => setRunning(false), [])
+  const pause = useCallback(() => {
+    setRunning(false);
+  }, []);
+
   const reset = useCallback(() => {
-    setRunning(false)
-    setSecondsLeft(durations[mode] * 60)
-  }, [durations, mode])
+    setRunning(false);
+    setSecondsLeft(durations[mode] * 60);
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    }
+  }, [durations, mode]);
 
-  const switchMode = useCallback((nextMode) => {
-    setRunning(false)
-    setMode(nextMode)
-  }, [])
+  const setCustomDuration = useCallback(
+    (modeKey, minutes) => {
+      const newDurations = {
+        ...durations,
+        [modeKey]: minutes,
+      };
+      setDurations(newDurations);
+      if (mode === modeKey && !running) {
+        setSecondsLeft(minutes * 60);
+      }
+    },
+    [mode, running, durations],
+  );
 
-  const setCustomDuration = useCallback((targetMode, minutes) => {
-    setDurations((prev) => ({ ...prev, [targetMode]: minutes }))
-  }, [])
+  // Main timer logic
+  useEffect(() => {
+    if (running && secondsLeft > 0) {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+      }
+
+      intervalRef.current = setInterval(() => {
+        setSecondsLeft((prev) => {
+          const newSeconds = prev - 1;
+
+          // Check if session is complete
+          if (newSeconds === 0) {
+            // Session complete!
+            const isFocus = mode === "focus";
+
+            // Send notification
+            const title = isFocus ? "🎉 Focus Complete!" : "☕ Break Complete!";
+            const body = isFocus
+              ? "Great job! Time for a break."
+              : "Break is over! Ready to focus again?";
+
+            sendNotification(title, body);
+
+            // Update stats for focus sessions
+            if (isFocus) {
+              setTodaySessions((prevCount) => prevCount + 1);
+              setMonthSessions((prevCount) => prevCount + 1);
+              setTodayFocusSeconds(
+                (prevSeconds) => prevSeconds + durations[mode] * 60,
+              );
+            }
+
+            // Determine next mode
+            let nextMode;
+            let nextSessionIndex = sessionIndex;
+
+            if (isFocus) {
+              // After focus, check if we need a long break
+              if (sessionIndex % SESSIONS_BEFORE_LONG_BREAK === 0) {
+                nextMode = "long_break";
+              } else {
+                nextMode = "short_break";
+              }
+              nextSessionIndex = sessionIndex + 1;
+            } else {
+              // After break, go back to focus
+              nextMode = "focus";
+            }
+
+            // Update state for next session
+            setMode(nextMode);
+            setSessionIndex(nextSessionIndex);
+            setSecondsLeft(durations[nextMode] * 60);
+            setRunning(false);
+
+            // Clear interval
+            if (intervalRef.current) {
+              clearInterval(intervalRef.current);
+              intervalRef.current = null;
+            }
+
+            return 0;
+          }
+
+          // Send warning notification 10 seconds before end
+          if (newSeconds === 10) {
+            const isFocus = mode === "focus";
+            sendNotification(
+              `${isFocus ? "Focus" : "Break"} ending soon!`,
+              `10 seconds remaining`,
+            );
+          }
+
+          return newSeconds;
+        });
+      }, 1000);
+    } else if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    }
+
+    return () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
+    };
+  }, [running, secondsLeft, mode, sessionIndex, durations, sendNotification]);
 
   return {
     mode,
@@ -155,6 +232,6 @@ export function usePomodoro({ notify } = {}) {
     pause,
     reset,
     switchMode,
-    setCustomDuration
-  }
+    setCustomDuration,
+  };
 }
