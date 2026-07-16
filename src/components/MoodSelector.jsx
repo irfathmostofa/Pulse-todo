@@ -34,7 +34,7 @@ export default function MoodSelector({
               </span>
             </>
           ) : (
-            "How ya doing today?"
+            "How are you feeling today?"
           )}
         </span>
 
@@ -77,7 +77,9 @@ export default function MoodSelector({
         </div>
       )}
 
-      {error && <p className="text-[11px] text-pulse">Couldn't save mood: {error}</p>}
+      {error && (
+        <p className="text-[11px] text-pulse">Couldn't save mood: {error}</p>
+      )}
     </div>
   );
 }
