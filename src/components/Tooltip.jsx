@@ -1,6 +1,6 @@
-export default function Tooltip({ text, className = '' }) {
+export default function Tooltip({ text, className = "" }) {
   return (
-    <span className={`relative inline-block min-w-0 group/tip ${className}`}>
+    <span className={`relative block w-full min-w-0 group/tip ${className}`}>
       <span className="block truncate" title={text}>
         {text}
       </span>
@@ -11,5 +11,5 @@ export default function Tooltip({ text, className = '' }) {
         {text}
       </span>
     </span>
-  )
+  );
 }
