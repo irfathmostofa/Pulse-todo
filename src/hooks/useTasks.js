@@ -1,244 +1,339 @@
-import { useCallback, useEffect, useState } from 'react'
-import { supabase } from '../supabaseClient'
-import { TASK_TYPES } from '../lib/constants'
+import { useCallback, useEffect, useState } from "react";
+import { supabase } from "../supabaseClient";
+import { TASK_TYPES } from "../lib/constants";
+import { useAuth } from "./useAuth";
 
 export function useTasks(dateISO) {
-  const [tasks, setTasks] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(null)
+  const { user } = useAuth();
+  const [tasks, setTasks] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
   const loadTasks = useCallback(async () => {
-    setLoading(true)
-    setError(null)
-
-    // 1. Make sure every still-active recurring template has an instance for this date.
-    // Templates flip to inactive once completed, so they stop generating new days.
-    const { data: templates, error: templatesErr } = await supabase
-      .from('recurring_tasks')
-      .select('*')
-      .eq('active', true)
-
-    if (templatesErr) {
-      setError(templatesErr.message)
-      setLoading(false)
-      return
+    // Don't fetch if no user is authenticated
+    if (!user) {
+      setTasks([]);
+      setLoading(false);
+      return;
     }
 
-    const { data: existing, error: existingErr } = await supabase
-      .from('tasks')
-      .select('*')
-      .eq('date', dateISO)
-      .order('priority', { ascending: true })
+    setLoading(true);
+    setError(null);
 
-    if (existingErr) {
-      setError(existingErr.message)
-      setLoading(false)
-      return
-    }
+    try {
+      // 1. Make sure every still-active recurring template has an instance for this date.
+      const { data: templates, error: templatesErr } = await supabase
+        .from("recurring_tasks")
+        .select("*")
+        .eq("user_id", user.id) // Add user filter
+        .eq("active", true);
 
-    const existingRecurringIds = new Set(
-      existing.filter((t) => t.recurring_id).map((t) => t.recurring_id)
-    )
-    const missing = (templates || []).filter((t) => !existingRecurringIds.has(t.id))
-
-    let merged = existing
-    if (missing.length > 0) {
-      const startPriority = existing.length
-      const inserts = missing.map((tpl, idx) => ({
-        date: dateISO,
-        title: tpl.title,
-        type: TASK_TYPES.RECURRING,
-        recurring_id: tpl.id,
-        status: 'pending',
-        priority: startPriority + idx
-      }))
-      const { data: inserted, error: insertErr } = await supabase
-        .from('tasks')
-        .insert(inserts)
-        .select()
-
-      if (insertErr) {
-        setError(insertErr.message)
-      } else {
-        merged = [...existing, ...inserted]
+      if (templatesErr) {
+        setError(templatesErr.message);
+        setLoading(false);
+        return;
       }
-    }
 
-    merged.sort((a, b) => a.priority - b.priority)
-    setTasks(merged)
-    setLoading(false)
-  }, [dateISO])
+      const { data: existing, error: existingErr } = await supabase
+        .from("tasks")
+        .select("*")
+        .eq("user_id", user.id) // Add user filter
+        .eq("date", dateISO)
+        .order("priority", { ascending: true });
+
+      if (existingErr) {
+        setError(existingErr.message);
+        setLoading(false);
+        return;
+      }
+
+      const existingRecurringIds = new Set(
+        existing.filter((t) => t.recurring_id).map((t) => t.recurring_id),
+      );
+      const missing = (templates || []).filter(
+        (t) => !existingRecurringIds.has(t.id),
+      );
+
+      let merged = existing;
+      if (missing.length > 0) {
+        const startPriority = existing.length;
+        const inserts = missing.map((tpl, idx) => ({
+          date: dateISO,
+          title: tpl.title,
+          type: TASK_TYPES.RECURRING,
+          recurring_id: tpl.id,
+          user_id: user.id, // Add user_id
+          status: "pending",
+          priority: startPriority + idx,
+        }));
+        const { data: inserted, error: insertErr } = await supabase
+          .from("tasks")
+          .insert(inserts)
+          .select();
+
+        if (insertErr) {
+          setError(insertErr.message);
+        } else {
+          merged = [...existing, ...inserted];
+        }
+      }
+
+      merged.sort((a, b) => a.priority - b.priority);
+      setTasks(merged);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }, [dateISO, user]);
+
+  // Add real-time subscription
+  useEffect(() => {
+    if (!user) return;
+
+    const subscription = supabase
+      .channel("tasks_channel")
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "tasks",
+          filter: `user_id=eq.${user.id}`,
+        },
+        () => {
+          loadTasks();
+        },
+      )
+      .subscribe();
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, [user, loadTasks]);
 
   useEffect(() => {
-    loadTasks()
-  }, [loadTasks])
+    loadTasks();
+  }, [loadTasks]);
 
   const addTask = useCallback(
     async (title, type = TASK_TYPES.NEW) => {
-      const trimmed = title.trim()
-      if (!trimmed) return
+      if (!user) {
+        setError("You must be logged in to add tasks");
+        return;
+      }
 
-      const nextPriority = tasks.length
+      const trimmed = title.trim();
+      if (!trimmed) return;
+
+      const nextPriority = tasks.length;
 
       if (type === TASK_TYPES.RECURRING) {
         const { data: template, error: tplErr } = await supabase
-          .from('recurring_tasks')
-          .insert({ title: trimmed, active: true })
+          .from("recurring_tasks")
+          .insert({
+            title: trimmed,
+            active: true,
+            user_id: user.id, // Add user_id
+          })
           .select()
-          .single()
+          .single();
 
         if (tplErr) {
-          setError(tplErr.message)
-          return
+          setError(tplErr.message);
+          return;
         }
 
         const { data: instance, error: instErr } = await supabase
-          .from('tasks')
+          .from("tasks")
           .insert({
             date: dateISO,
             title: trimmed,
             type: TASK_TYPES.RECURRING,
             recurring_id: template.id,
-            status: 'pending',
-            priority: nextPriority
+            user_id: user.id, // Add user_id
+            status: "pending",
+            priority: nextPriority,
           })
           .select()
-          .single()
+          .single();
 
         if (instErr) {
-          setError(instErr.message)
-          return
+          setError(instErr.message);
+          return;
         }
-        setTasks((prev) => [...prev, instance])
-        return
+        setTasks((prev) => [...prev, instance]);
+        return;
       }
 
       const { data, error: insErr } = await supabase
-        .from('tasks')
+        .from("tasks")
         .insert({
           date: dateISO,
           title: trimmed,
           type: TASK_TYPES.NEW,
-          status: 'pending',
-          priority: nextPriority
+          user_id: user.id, // Add user_id
+          status: "pending",
+          priority: nextPriority,
         })
         .select()
-        .single()
+        .single();
 
       if (insErr) {
-        setError(insErr.message)
-        return
+        setError(insErr.message);
+        return;
       }
-      setTasks((prev) => [...prev, data])
+      setTasks((prev) => [...prev, data]);
     },
-    [dateISO, tasks.length]
-  )
+    [dateISO, tasks.length, user],
+  );
 
-  // Recurring tasks share ONE completion state across every day they appear on:
-  // finishing it anywhere marks it done everywhere (past and future instances)
-  // and stops it from recurring tomorrow. Un-completing it brings it back.
-  const toggleComplete = useCallback(async (task) => {
-    const nextStatus = task.status === 'done' ? 'pending' : 'done'
-    const completedAt = nextStatus === 'done' ? new Date().toISOString() : null
+  // Recurring tasks share ONE completion state across every day they appear on
+  const toggleComplete = useCallback(
+    async (task) => {
+      if (!user) return;
 
-    if (task.type === TASK_TYPES.RECURRING && task.recurring_id) {
+      const nextStatus = task.status === "done" ? "pending" : "done";
+      const completedAt =
+        nextStatus === "done" ? new Date().toISOString() : null;
+
+      if (task.type === TASK_TYPES.RECURRING && task.recurring_id) {
+        setTasks((prev) =>
+          prev.map((t) =>
+            t.recurring_id === task.recurring_id
+              ? { ...t, status: nextStatus, completed_at: completedAt }
+              : t,
+          ),
+        );
+
+        const [{ error: updErr }, { error: activeErr }] = await Promise.all([
+          supabase
+            .from("tasks")
+            .update({ status: nextStatus, completed_at: completedAt })
+            .eq("recurring_id", task.recurring_id)
+            .eq("user_id", user.id), // Add user filter
+          supabase
+            .from("recurring_tasks")
+            .update({ active: nextStatus !== "done" })
+            .eq("id", task.recurring_id)
+            .eq("user_id", user.id), // Add user filter
+        ]);
+
+        if (updErr) setError(updErr.message);
+        if (activeErr) setError(activeErr.message);
+        return;
+      }
+
       setTasks((prev) =>
         prev.map((t) =>
-          t.recurring_id === task.recurring_id
+          t.id === task.id
             ? { ...t, status: nextStatus, completed_at: completedAt }
-            : t
-        )
-      )
+            : t,
+        ),
+      );
 
-      const [{ error: updErr }, { error: activeErr }] = await Promise.all([
-        supabase
-          .from('tasks')
-          .update({ status: nextStatus, completed_at: completedAt })
-          .eq('recurring_id', task.recurring_id),
-        supabase
-          .from('recurring_tasks')
-          .update({ active: nextStatus !== 'done' })
-          .eq('id', task.recurring_id)
-      ])
+      const { error: updErr } = await supabase
+        .from("tasks")
+        .update({ status: nextStatus, completed_at: completedAt })
+        .eq("id", task.id)
+        .eq("user_id", user.id); // Add user filter
 
-      if (updErr) setError(updErr.message)
-      if (activeErr) setError(activeErr.message)
-      return
-    }
+      if (updErr) setError(updErr.message);
+    },
+    [user],
+  );
 
-    setTasks((prev) =>
-      prev.map((t) => (t.id === task.id ? { ...t, status: nextStatus, completed_at: completedAt } : t))
-    )
+  const convertToRecurring = useCallback(
+    async (task) => {
+      if (!user || task.type === TASK_TYPES.RECURRING) return;
 
-    const { error: updErr } = await supabase
-      .from('tasks')
-      .update({ status: nextStatus, completed_at: completedAt })
-      .eq('id', task.id)
+      const { data: template, error: tplErr } = await supabase
+        .from("recurring_tasks")
+        .insert({
+          title: task.title,
+          active: true,
+          user_id: user.id, // Add user_id
+        })
+        .select()
+        .single();
 
-    if (updErr) setError(updErr.message)
-  }, [])
+      if (tplErr) {
+        setError(tplErr.message);
+        return;
+      }
 
-  // Turns an existing one-time task into a recurring one: creates the
-  // template from its title, then re-tags this row to point at it. Future
-  // days will pick it up automatically via loadTasks.
-  const convertToRecurring = useCallback(async (task) => {
-    if (task.type === TASK_TYPES.RECURRING) return
+      setTasks((prev) =>
+        prev.map((t) =>
+          t.id === task.id
+            ? { ...t, type: TASK_TYPES.RECURRING, recurring_id: template.id }
+            : t,
+        ),
+      );
 
-    const { data: template, error: tplErr } = await supabase
-      .from('recurring_tasks')
-      .insert({ title: task.title, active: true })
-      .select()
-      .single()
+      const { error: updErr } = await supabase
+        .from("tasks")
+        .update({ type: TASK_TYPES.RECURRING, recurring_id: template.id })
+        .eq("id", task.id)
+        .eq("user_id", user.id); // Add user filter
 
-    if (tplErr) {
-      setError(tplErr.message)
-      return
-    }
+      if (updErr) setError(updErr.message);
+    },
+    [user],
+  );
 
-    setTasks((prev) =>
-      prev.map((t) =>
-        t.id === task.id ? { ...t, type: TASK_TYPES.RECURRING, recurring_id: template.id } : t
-      )
-    )
+  const deleteTask = useCallback(
+    async (taskId) => {
+      if (!user) return;
 
-    const { error: updErr } = await supabase
-      .from('tasks')
-      .update({ type: TASK_TYPES.RECURRING, recurring_id: template.id })
-      .eq('id', task.id)
+      setTasks((prev) => prev.filter((t) => t.id !== taskId));
+      const { error: delErr } = await supabase
+        .from("tasks")
+        .delete()
+        .eq("id", taskId)
+        .eq("user_id", user.id); // Add user filter
+      if (delErr) setError(delErr.message);
+    },
+    [user],
+  );
 
-    if (updErr) setError(updErr.message)
-  }, [])
+  const deleteRecurring = useCallback(
+    async (recurringId) => {
+      if (!user) return;
 
-  const deleteTask = useCallback(async (taskId) => {
-    setTasks((prev) => prev.filter((t) => t.id !== taskId))
-    const { error: delErr } = await supabase.from('tasks').delete().eq('id', taskId)
-    if (delErr) setError(delErr.message)
-  }, [])
+      setTasks((prev) => prev.filter((t) => t.recurring_id !== recurringId));
+      const { error: delErr } = await supabase
+        .from("recurring_tasks")
+        .delete()
+        .eq("id", recurringId)
+        .eq("user_id", user.id); // Add user filter
+      if (delErr) setError(delErr.message);
+    },
+    [user],
+  );
 
-  // Deletes the recurring template, which cascades and removes every day's
-  // instance of it (past and future) via the FK "on delete cascade".
-  const deleteRecurring = useCallback(async (recurringId) => {
-    setTasks((prev) => prev.filter((t) => t.recurring_id !== recurringId))
-    const { error: delErr } = await supabase
-      .from('recurring_tasks')
-      .delete()
-      .eq('id', recurringId)
-    if (delErr) setError(delErr.message)
-  }, [])
+  const reorder = useCallback(
+    async (orderedIds) => {
+      if (!user) return;
 
-  const reorder = useCallback(async (orderedIds) => {
-    setTasks((prev) => {
-      const byId = Object.fromEntries(prev.map((t) => [t.id, t]))
-      return orderedIds.map((id, idx) => ({ ...byId[id], priority: idx }))
-    })
+      setTasks((prev) => {
+        const byId = Object.fromEntries(prev.map((t) => [t.id, t]));
+        return orderedIds.map((id, idx) => ({ ...byId[id], priority: idx }));
+      });
 
-    const updates = orderedIds.map((id, idx) =>
-      supabase.from('tasks').update({ priority: idx }).eq('id', id)
-    )
-    const results = await Promise.all(updates)
-    const failed = results.find((r) => r.error)
-    if (failed) setError(failed.error.message)
-  }, [])
+      const updates = orderedIds.map(
+        (id, idx) =>
+          supabase
+            .from("tasks")
+            .update({ priority: idx })
+            .eq("id", id)
+            .eq("user_id", user.id), // Add user filter
+      );
+      const results = await Promise.all(updates);
+      const failed = results.find((r) => r.error);
+      if (failed) setError(failed.error.message);
+    },
+    [user],
+  );
 
   return {
     tasks,
@@ -250,6 +345,6 @@ export function useTasks(dateISO) {
     deleteRecurring,
     convertToRecurring,
     reorder,
-    refetch: loadTasks
-  }
+    refetch: loadTasks,
+  };
 }

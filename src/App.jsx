@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import Header from "./components/Header";
 import BottomNav from "./components/BottomNav";
 import DateStrip from "./components/DateStrip";
@@ -27,8 +27,16 @@ export default function App() {
   } = useAuth();
   const { theme, toggleTheme } = useTheme();
 
+  // Set default tab to 'tasks' when user is authenticated
   const [activeTab, setActiveTab] = useState("tasks");
   const [selectedDate, setSelectedDate] = useState(new Date());
+
+  // Reset to tasks tab when user logs in
+  useEffect(() => {
+    if (session) {
+      setActiveTab("tasks");
+    }
+  }, [session]);
 
   const dateISO = useMemo(() => toISODate(selectedDate), [selectedDate]);
   const {
