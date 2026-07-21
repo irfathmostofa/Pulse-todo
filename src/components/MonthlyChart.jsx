@@ -78,13 +78,31 @@ export default function MonthlyChart({
 
     yPosition += 8;
 
+    // Filter unique recurring tasks and keep non-recurring tasks
+    const uniqueTasks = [];
+    const recurringTaskSet = new Set();
+
+    yearlyTasks.forEach((task) => {
+      if (task.type === "recurring") {
+        if (!recurringTaskSet.has(task.title)) {
+          recurringTaskSet.add(task.title);
+          uniqueTasks.push(task);
+        }
+      } else {
+        uniqueTasks.push(task);
+      }
+    });
+
+    // Sort alphabetically
+    uniqueTasks.sort((a, b) => a.title.localeCompare(b.title));
+
     // Tasks header with count
     doc.setFontSize(11);
     doc.setTextColor(33, 37, 41);
-    doc.text(`All Tasks (${yearlyTasks.length})`, 20, yPosition);
+    doc.text(`All Tasks (${uniqueTasks.length})`, 20, yPosition);
 
     // Prepare table data - With Serial, Task, and Status
-    const tableData = yearlyTasks.map((task, index) => [
+    const tableData = uniqueTasks.map((task, index) => [
       (index + 1).toString(),
       task.title,
       task.status === "done" ? "Completed" : "Pending",
@@ -92,7 +110,7 @@ export default function MonthlyChart({
 
     autoTable(doc, {
       startY: yPosition + 5,
-      head: [["SL", "Task", "Status"]],
+      head: [["Serial", "Task", "Status"]],
       body:
         tableData.length > 0
           ? tableData
