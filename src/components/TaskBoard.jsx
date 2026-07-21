@@ -23,6 +23,7 @@ export default function TaskBoard({
   onDeleteRecurring,
   onReorder,
   onConvertToRecurring,
+  onEdit, // Add this prop
 }) {
   const [title, setTitle] = useState("");
   const [type, setType] = useState(TASK_TYPES.NEW);
@@ -110,7 +111,9 @@ export default function TaskBoard({
           </button>
 
           <span className="text-xs text-ghost-faint ml-auto">
-            {type === TASK_TYPES.NEW ? "✓ One-time task" : "⟳ Repeats until done"}
+            {type === TASK_TYPES.NEW
+              ? "✓ One-time task"
+              : "⟳ Repeats until done"}
           </span>
         </div>
       </form>
@@ -152,6 +155,7 @@ export default function TaskBoard({
                   onDelete={onDelete}
                   onDeleteRecurring={onDeleteRecurring}
                   onConvertToRecurring={onConvertToRecurring}
+                  onEdit={onEdit} // Pass it down
                 />
               ))}
             </div>

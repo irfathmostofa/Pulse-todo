@@ -25,7 +25,7 @@ export function useTasks(dateISO) {
       const { data: templates, error: templatesErr } = await supabase
         .from("recurring_tasks")
         .select("*")
-        .eq("user_id", user.id) // Add user filter
+        .eq("user_id", user.id)
         .eq("active", true);
 
       if (templatesErr) {
@@ -37,7 +37,7 @@ export function useTasks(dateISO) {
       const { data: existing, error: existingErr } = await supabase
         .from("tasks")
         .select("*")
-        .eq("user_id", user.id) // Add user filter
+        .eq("user_id", user.id)
         .eq("date", dateISO)
         .order("priority", { ascending: true });
 
@@ -62,7 +62,7 @@ export function useTasks(dateISO) {
           title: tpl.title,
           type: TASK_TYPES.RECURRING,
           recurring_id: tpl.id,
-          user_id: user.id, // Add user_id
+          user_id: user.id,
           status: "pending",
           priority: startPriority + idx,
         }));
@@ -134,7 +134,7 @@ export function useTasks(dateISO) {
           .insert({
             title: trimmed,
             active: true,
-            user_id: user.id, // Add user_id
+            user_id: user.id,
           })
           .select()
           .single();
@@ -151,7 +151,7 @@ export function useTasks(dateISO) {
             title: trimmed,
             type: TASK_TYPES.RECURRING,
             recurring_id: template.id,
-            user_id: user.id, // Add user_id
+            user_id: user.id,
             status: "pending",
             priority: nextPriority,
           })
@@ -172,7 +172,7 @@ export function useTasks(dateISO) {
           date: dateISO,
           title: trimmed,
           type: TASK_TYPES.NEW,
-          user_id: user.id, // Add user_id
+          user_id: user.id,
           status: "pending",
           priority: nextPriority,
         })
@@ -211,12 +211,12 @@ export function useTasks(dateISO) {
             .from("tasks")
             .update({ status: nextStatus, completed_at: completedAt })
             .eq("recurring_id", task.recurring_id)
-            .eq("user_id", user.id), // Add user filter
+            .eq("user_id", user.id),
           supabase
             .from("recurring_tasks")
             .update({ active: nextStatus !== "done" })
             .eq("id", task.recurring_id)
-            .eq("user_id", user.id), // Add user filter
+            .eq("user_id", user.id),
         ]);
 
         if (updErr) setError(updErr.message);
@@ -236,7 +236,7 @@ export function useTasks(dateISO) {
         .from("tasks")
         .update({ status: nextStatus, completed_at: completedAt })
         .eq("id", task.id)
-        .eq("user_id", user.id); // Add user filter
+        .eq("user_id", user.id);
 
       if (updErr) setError(updErr.message);
     },
@@ -252,7 +252,7 @@ export function useTasks(dateISO) {
         .insert({
           title: task.title,
           active: true,
-          user_id: user.id, // Add user_id
+          user_id: user.id,
         })
         .select()
         .single();
@@ -274,7 +274,7 @@ export function useTasks(dateISO) {
         .from("tasks")
         .update({ type: TASK_TYPES.RECURRING, recurring_id: template.id })
         .eq("id", task.id)
-        .eq("user_id", user.id); // Add user filter
+        .eq("user_id", user.id);
 
       if (updErr) setError(updErr.message);
     },
@@ -290,7 +290,7 @@ export function useTasks(dateISO) {
         .from("tasks")
         .delete()
         .eq("id", taskId)
-        .eq("user_id", user.id); // Add user filter
+        .eq("user_id", user.id);
       if (delErr) setError(delErr.message);
     },
     [user],
@@ -305,7 +305,7 @@ export function useTasks(dateISO) {
         .from("recurring_tasks")
         .delete()
         .eq("id", recurringId)
-        .eq("user_id", user.id); // Add user filter
+        .eq("user_id", user.id);
       if (delErr) setError(delErr.message);
     },
     [user],
@@ -320,19 +320,101 @@ export function useTasks(dateISO) {
         return orderedIds.map((id, idx) => ({ ...byId[id], priority: idx }));
       });
 
-      const updates = orderedIds.map(
-        (id, idx) =>
-          supabase
-            .from("tasks")
-            .update({ priority: idx })
-            .eq("id", id)
-            .eq("user_id", user.id), // Add user filter
+      const updates = orderedIds.map((id, idx) =>
+        supabase
+          .from("tasks")
+          .update({ priority: idx })
+          .eq("id", id)
+          .eq("user_id", user.id),
       );
       const results = await Promise.all(updates);
       const failed = results.find((r) => r.error);
       if (failed) setError(failed.error.message);
     },
     [user],
+  );
+
+  // NEW: Edit task function
+  const editTask = useCallback(
+    async (taskId, newTitle) => {
+      if (!user) {
+        setError("You must be logged in to edit tasks");
+        return;
+      }
+
+      const trimmed = newTitle.trim();
+      if (!trimmed) return;
+
+      // Find the task to check if it's recurring
+      const taskToEdit = tasks.find((t) => t.id === taskId);
+      if (!taskToEdit) {
+        setError("Task not found");
+        return;
+      }
+
+      // Optimistically update UI
+      setTasks((prev) =>
+        prev.map((t) => (t.id === taskId ? { ...t, title: trimmed } : t)),
+      );
+
+      // If it's a recurring task, update both the task instance AND the recurring template
+      if (taskToEdit.type === TASK_TYPES.RECURRING && taskToEdit.recurring_id) {
+        // Update the task instance
+        const { error: taskErr } = await supabase
+          .from("tasks")
+          .update({ title: trimmed })
+          .eq("id", taskId)
+          .eq("user_id", user.id);
+
+        if (taskErr) {
+          setError(taskErr.message);
+          // Revert optimistic update
+          setTasks((prev) =>
+            prev.map((t) =>
+              t.id === taskId ? { ...t, title: taskToEdit.title } : t,
+            ),
+          );
+          return;
+        }
+
+        // Update the recurring template
+        const { error: templateErr } = await supabase
+          .from("recurring_tasks")
+          .update({ title: trimmed })
+          .eq("id", taskToEdit.recurring_id)
+          .eq("user_id", user.id);
+
+        if (templateErr) {
+          setError(templateErr.message);
+          // Revert optimistic update
+          setTasks((prev) =>
+            prev.map((t) =>
+              t.id === taskId ? { ...t, title: taskToEdit.title } : t,
+            ),
+          );
+          return;
+        }
+      } else {
+        // For regular tasks, just update the task
+        const { error: taskErr } = await supabase
+          .from("tasks")
+          .update({ title: trimmed })
+          .eq("id", taskId)
+          .eq("user_id", user.id);
+
+        if (taskErr) {
+          setError(taskErr.message);
+          // Revert optimistic update
+          setTasks((prev) =>
+            prev.map((t) =>
+              t.id === taskId ? { ...t, title: taskToEdit.title } : t,
+            ),
+          );
+          return;
+        }
+      }
+    },
+    [tasks, user],
   );
 
   return {
@@ -345,6 +427,7 @@ export function useTasks(dateISO) {
     deleteRecurring,
     convertToRecurring,
     reorder,
+    editTask, // Export the new function
     refetch: loadTasks,
   };
 }

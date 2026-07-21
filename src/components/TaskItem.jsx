@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { GripVertical, Check, X, Repeat, Sparkles } from "lucide-react";
+import { GripVertical, Check, X, Repeat, Sparkles, Pencil } from "lucide-react";
 import Tooltip from "./Tooltip";
 import BottomSheet from "./BottomSheet";
 import ConfirmSheet from "./ConfirmSheet";
@@ -12,6 +12,7 @@ export default function TaskItem({
   onDelete,
   onDeleteRecurring,
   onConvertToRecurring,
+  onEdit, // Add this prop
 }) {
   const {
     attributes,
@@ -25,6 +26,8 @@ export default function TaskItem({
   });
   const [showTitle, setShowTitle] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [showEdit, setShowEdit] = useState(false);
+  const [editTitle, setEditTitle] = useState(task.title);
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -43,6 +46,13 @@ export default function TaskItem({
     } else {
       onDelete(task.id);
     }
+  };
+
+  const handleEditSubmit = (e) => {
+    e.preventDefault();
+    if (!editTitle.trim()) return;
+    onEdit(task.id, editTitle);
+    setShowEdit(false);
   };
 
   return (
@@ -91,6 +101,19 @@ export default function TaskItem({
         {recurring ? "Recurring" : "New"}
       </span>
 
+      {/* Edit button */}
+      <button
+        onClick={() => {
+          setEditTitle(task.title);
+          setShowEdit(true);
+        }}
+        className="shrink-0 rounded-full p-1.5 text-ghost-faint hover:bg-ink hover:text-pulse transition-all"
+        aria-label="Edit task"
+        title="Edit task"
+      >
+        <Pencil size={15} />
+      </button>
+
       {!recurring && (
         <button
           onClick={() => onConvertToRecurring(task)}
@@ -111,6 +134,7 @@ export default function TaskItem({
         <X size={15} />
       </button>
 
+      {/* View Task BottomSheet */}
       <BottomSheet open={showTitle} onClose={() => setShowTitle(false)}>
         <div className="flex items-center gap-2 mb-3">
           {recurring ? (
@@ -127,6 +151,45 @@ export default function TaskItem({
         </p>
       </BottomSheet>
 
+      {/* Edit Task BottomSheet */}
+      <BottomSheet open={showEdit} onClose={() => setShowEdit(false)}>
+        <form onSubmit={handleEditSubmit} className="flex flex-col gap-4">
+          <div className="flex items-center gap-2">
+            <Pencil size={16} className="text-pulse shrink-0" />
+            <span className="text-xs text-ghost-faint font-medium">
+              Edit task
+            </span>
+          </div>
+
+          <div className="flex items-center gap-2 rounded-2xl bg-ink-surface border border-ink-line px-3 focus-within:border-pulse transition-colors">
+            <input
+              value={editTitle}
+              onChange={(e) => setEditTitle(e.target.value)}
+              placeholder="Update task name..."
+              className="flex-1 bg-transparent py-3 text-sm text-ghost placeholder:text-ghost-faint focus:outline-none"
+              autoFocus
+            />
+          </div>
+
+          <div className="flex gap-2 justify-end">
+            <button
+              type="button"
+              onClick={() => setShowEdit(false)}
+              className="rounded-xl px-4 py-2 text-xs font-medium text-ghost-muted hover:text-ghost transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="rounded-xl bg-pulse px-4 py-2 text-xs font-semibold text-white hover:brightness-105 transition-all"
+            >
+              Save Changes
+            </button>
+          </div>
+        </form>
+      </BottomSheet>
+
+      {/* Delete Confirmation Sheet */}
       <ConfirmSheet
         open={confirmDelete}
         title={recurring ? "Delete recurring task?" : "Delete this task?"}

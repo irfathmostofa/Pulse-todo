@@ -48,6 +48,7 @@ export default function App() {
     deleteRecurring,
     convertToRecurring,
     reorder,
+    editTask, // Destructure the new function
   } = useTasks(dateISO);
   const {
     mood,
@@ -102,6 +103,7 @@ export default function App() {
                 onDeleteRecurring={deleteRecurring}
                 onConvertToRecurring={convertToRecurring}
                 onReorder={reorder}
+                onEdit={editTask} // Pass it down
               />
             )}
           </>
