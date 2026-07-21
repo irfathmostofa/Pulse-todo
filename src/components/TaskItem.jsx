@@ -12,7 +12,7 @@ export default function TaskItem({
   onDelete,
   onDeleteRecurring,
   onConvertToRecurring,
-  onEdit, // Add this prop
+  onEdit,
 }) {
   const {
     attributes,
@@ -59,7 +59,7 @@ export default function TaskItem({
     <div
       ref={setNodeRef}
       style={style}
-      className={`group flex items-center gap-3 rounded-2xl border px-3 py-3 bg-ink-surface transition-colors
+      className={`group flex items-center gap-1.5 sm:gap-2 rounded-2xl border px-2 sm:px-3 py-2.5 sm:py-3 bg-ink-surface transition-colors
         ${isDragging ? "opacity-60 border-pulse" : "border-ink-line hover:border-ink-line"}
       `}
     >
@@ -69,17 +69,17 @@ export default function TaskItem({
         className="cursor-grab active:cursor-grabbing text-ghost-faint hover:text-ghost-muted shrink-0 touch-none"
         aria-label="Drag to reorder"
       >
-        <GripVertical size={18} />
+        <GripVertical size={16} className="sm:size-[18px]" />
       </button>
 
       <button
         onClick={() => onToggle(task)}
-        className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 transition-all
+        className={`flex h-5 w-5 sm:h-6 sm:w-6 shrink-0 items-center justify-center rounded-full border-2 transition-all
           ${done ? "bg-mint border-mint" : "border-ghost-faint hover:border-mint"}
         `}
         aria-label={done ? "Mark as pending" : "Mark as done"}
       >
-        {done && <Check size={14} className="text-ink" strokeWidth={3} />}
+        {done && <Check size={12} className="text-ink" strokeWidth={3} />}
       </button>
 
       <button
@@ -88,16 +88,16 @@ export default function TaskItem({
       >
         <Tooltip
           text={task.title}
-          className={`text-sm md:text-white ${recurring ? "text-volt" : "New"} font-medium ${done ? "text-ghost-faint line-through" : "text-ghost"}`}
+          className={`text-xs sm:text-sm md:text-white ${recurring ? "text-volt" : "New"} font-medium ${done ? "text-ghost-faint line-through" : "text-ghost"}`}
         />
       </button>
 
       <span
-        className={`hidden sm:flex shrink-0 items-center gap-1 rounded-full px-2 py-1 text-[10px] font-medium
+        className={`hidden sm:flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium
           ${recurring ? "bg-volt/15 text-volt" : "bg-pulse/15 text-pulse"}
         `}
       >
-        {recurring ? <Repeat size={11} /> : <Sparkles size={11} />}
+        {recurring ? <Repeat size={10} /> : <Sparkles size={10} />}
         {recurring ? "Recurring" : "New"}
       </span>
 
@@ -107,31 +107,31 @@ export default function TaskItem({
           setEditTitle(task.title);
           setShowEdit(true);
         }}
-        className="shrink-0 rounded-full p-1.5 text-ghost-faint hover:bg-ink hover:text-pulse transition-all"
+        className="shrink-0 rounded-full p-1 sm:p-1.5 text-ghost-faint hover:bg-ink hover:text-pulse transition-all"
         aria-label="Edit task"
         title="Edit task"
       >
-        <Pencil size={15} />
+        <Pencil size={13} className="sm:size-[15px]" />
       </button>
 
       {!recurring && (
         <button
           onClick={() => onConvertToRecurring(task)}
-          className="shrink-0 rounded-full p-1.5 text-ghost-faint hover:bg-ink hover:text-volt transition-all"
+          className="shrink-0 rounded-full p-1 sm:p-1.5 text-ghost-faint hover:bg-ink hover:text-volt transition-all"
           aria-label="Make this task recurring"
           title="Make recurring"
         >
-          <Repeat size={15} />
+          <Repeat size={13} className="sm:size-[15px]" />
         </button>
       )}
 
       <button
         onClick={handleDeleteClick}
-        className="shrink-0 rounded-full p-1.5 text-ghost-faint hover:bg-ink hover:text-pulse transition-all"
+        className="shrink-0 rounded-full p-1 sm:p-1.5 text-ghost-faint hover:bg-ink hover:text-pulse transition-all"
         aria-label={recurring ? "Delete recurring task" : "Delete task"}
         title={recurring ? "Delete recurring task" : "Delete task"}
       >
-        <X size={15} />
+        <X size={13} className="sm:size-[15px]" />
       </button>
 
       {/* View Task BottomSheet */}
