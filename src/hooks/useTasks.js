@@ -427,7 +427,7 @@ export function useTasks(dateISO) {
     deleteRecurring,
     convertToRecurring,
     reorder,
-    editTask, // Export the new function
+    editTask,
     refetch: loadTasks,
   };
 }
